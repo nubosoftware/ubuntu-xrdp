@@ -65,6 +65,10 @@ RUN apt update &&  apt -y full-upgrade && apt-get install -y \
   apt autoremove -y && \
   rm -rf /var/cache/apt /var/lib/apt/lists && \
   mkdir -p /var/lib/xrdp-pulseaudio-installer
+COPY debs /tmp/debs
+RUN apt install -y \
+  /tmp/debs/xorgxrdp_0.2.15-1_amd64.deb \
+  /tmp/debs/xrdp_0.9.15-1ubuntu1_amd64.deb
 COPY --from=builder /tmp/so/module-xrdp-source.so /var/lib/xrdp-pulseaudio-installer
 COPY --from=builder /tmp/so/module-xrdp-sink.so /var/lib/xrdp-pulseaudio-installer
 ADD bin /usr/bin
@@ -79,7 +83,7 @@ RUN mkdir /var/run/dbus && \
   locale-gen en_US.UTF-8 && \
   echo "pulseaudio -D --enable-memfd=True" > /etc/skel/.Xsession && \
   echo "xfce4-session" >> /etc/skel/.Xsession && \
-  rm -rf /etc/xrdp/rsakeys.ini /etc/xrdp/*.pem
+  rm -rf /etc/xrdp/rsakeys.ini /etc/xrdp/*.pem /tmp/debs
 
 # Docker config
 VOLUME ["/home"]

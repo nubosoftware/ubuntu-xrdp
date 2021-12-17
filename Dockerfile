@@ -9,12 +9,11 @@ RUN apt-get -y update
 RUN apt-get -yy upgrade
 ENV BUILD_DEPS="git autoconf pkg-config libssl-dev libpam0g-dev \
     libx11-dev libxfixes-dev libxrandr-dev nasm xsltproc flex \
-    bison libxml2-dev dpkg-dev libcap-dev"
+    bison libxml2-dev dpkg-dev libcap-dev wget"
 RUN apt-get -yy install  sudo apt-utils software-properties-common $BUILD_DEPS
 
 
 # Build xrdp
-
 WORKDIR /tmp
 RUN apt-get source pulseaudio
 RUN apt-get build-dep -yy pulseaudio
@@ -36,12 +35,36 @@ RUN make
 RUN mkdir -p /tmp/so
 RUN cp src/.libs/*.so /tmp/so
 
+# compile xrdp_0.9.15 deb file
+WORKDIR /tmp
+RUN wget http://archive.ubuntu.com/ubuntu/pool/universe/x/xrdp/xrdp_0.9.15.orig.tar.gz && \
+  wget http://archive.ubuntu.com/ubuntu/pool/universe/x/xrdp/xrdp_0.9.15-1ubuntu1.debian.tar.xz
+RUN tar xvzf xrdp_0.9.15.orig.tar.gz
+WORKDIR /tmp/xrdp-0.9.15
+RUN tar xf ../xrdp_0.9.15-1ubuntu1.debian.tar.xz
+RUN apt-get build-dep -yy xrdp --option=Dpkg::Options::=--force-confdef
+RUN dpkg-buildpackage -rfakeroot -uc -b
+
+# compile xrdp_0.9.15 deb file
+WORKDIR /tmp
+RUN wget http://archive.ubuntu.com/ubuntu/pool/universe/x/xorgxrdp/xorgxrdp_0.2.15.orig.tar.gz && \
+  wget http://archive.ubuntu.com/ubuntu/pool/universe/x/xorgxrdp/xorgxrdp_0.2.15-1.debian.tar.xz
+RUN tar xvzf xorgxrdp_0.2.15.orig.tar.gz
+WORKDIR /tmp/xorgxrdp-0.2.15
+RUN tar xf ../xorgxrdp_0.2.15-1.debian.tar.xz
+RUN apt-get build-dep -yy xorgxrdp --option=Dpkg::Options::=--force-confdef
+RUN apt-get install -y /tmp/xrdp_0.9.15-1ubuntu1_amd64.deb --option=Dpkg::Options::=--force-confdef
+RUN dpkg-buildpackage -rfakeroot -uc -b
+
 FROM ubuntu:20.04
 ARG ADDITIONAL_PACKAGES=""
 ENV ADDITIONAL_PACKAGES=${ADDITIONAL_PACKAGES}
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt update && apt install -y software-properties-common apt-utils
 RUN add-apt-repository "deb http://archive.canonical.com/ $(lsb_release -sc) partner" && apt update
+RUN mkdir -p /tmp/debs
+COPY --from=builder /tmp/xrdp_0.9.15-1ubuntu1_amd64.deb /tmp/debs
+COPY --from=builder /tmp/xorgxrdp_0.2.15-1_amd64.deb /tmp/debs
 RUN apt update &&  apt -y full-upgrade && apt-get install -y \
   ca-certificates \
   crudini \
@@ -57,18 +80,14 @@ RUN apt update &&  apt -y full-upgrade && apt-get install -y \
   xfce4-taskmanager \
   xfce4-terminal \
   xfce4-xkb-plugin \
-  xorgxrdp \
+  /tmp/debs/xorgxrdp_0.2.15-1_amd64.deb \
   xprintidle \
-  xrdp \
+  /tmp/debs/xrdp_0.9.15-1ubuntu1_amd64.deb \
   $ADDITIONAL_PACKAGES && \
   apt remove -y light-locker xscreensaver && \
   apt autoremove -y && \
   rm -rf /var/cache/apt /var/lib/apt/lists && \
   mkdir -p /var/lib/xrdp-pulseaudio-installer
-COPY debs /tmp/debs
-RUN apt install -y \
-  /tmp/debs/xorgxrdp_0.2.15-1_amd64.deb \
-  /tmp/debs/xrdp_0.9.15-1ubuntu1_amd64.deb
 COPY --from=builder /tmp/so/module-xrdp-source.so /var/lib/xrdp-pulseaudio-installer
 COPY --from=builder /tmp/so/module-xrdp-sink.so /var/lib/xrdp-pulseaudio-installer
 ADD bin /usr/bin
